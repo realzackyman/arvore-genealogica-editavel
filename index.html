@@ -449,6 +449,7 @@
         <div class="toolbar-group">
           <button class="primary" id="addPerson">+ Pessoa</button>
           <button id="addParent">Ligar pai/mãe</button>
+          <button id="addSibling">Ligar irmão/ã</button>
           <button id="addSpouse">Ligar casal</button>
           <button id="autoLayout">Organizar</button>
         </div>
@@ -522,7 +523,7 @@
         </form>
       </aside>
       <div class="help">
-        Arrasta pessoas para posicionar. Seleciona uma pessoa e usa “Ligar pai/mãe” ou “Ligar casal”. Os dados ficam só neste navegador; exporta JSON para ter cópia.
+        Arrasta pessoas para posicionar. Irmãos são ligados ao partilhar o mesmo pai/mãe. Os dados ficam só neste navegador; exporta JSON para ter cópia.
       </div>
     </main>
   </div>
@@ -613,6 +614,26 @@
 
     function personById(id) {
       return state.people.find(person => person.id === id);
+    }
+
+    function parentIdsFor(childId) {
+      return state.links
+        .filter(link => link.type === "parent" && link.to === childId)
+        .map(link => link.from);
+    }
+
+    function hasLink(type, from, to) {
+      return state.links.some(link =>
+        link.type === type &&
+        ((link.from === from && link.to === to) ||
+        (type === "spouse" && link.from === to && link.to === from))
+      );
+    }
+
+    function addLink(type, from, to) {
+      if (from === to || hasLink(type, from, to)) return false;
+      state.links.push({ type, from, to });
+      return true;
     }
 
     function apiUrl(params) {
@@ -1012,6 +1033,7 @@
     }
 
     document.getElementById("addParent").addEventListener("click", () => openRelationship("parent"));
+    document.getElementById("addSibling").addEventListener("click", () => openRelationship("sibling"));
     document.getElementById("addSpouse").addEventListener("click", () => openRelationship("spouse"));
 
     lookupPersonButton.addEventListener("click", async () => {
@@ -1050,9 +1072,12 @@
         return;
       }
       mode = type;
-      document.getElementById("relationshipTitle").textContent = type === "parent"
-        ? `Escolher pai/mãe de ${source.name}`
-        : `Escolher cônjuge/par de ${source.name}`;
+      const titleByType = {
+        parent: `Escolher pai/mãe de ${source.name}`,
+        sibling: `Escolher irmão/ã de ${source.name}`,
+        spouse: `Escolher cônjuge/par de ${source.name}`
+      };
+      document.getElementById("relationshipTitle").textContent = titleByType[type];
       targetPerson.innerHTML = state.people
         .filter(person => person.id !== source.id)
         .map(person => `<option value="${person.id}">${escapeHtml(person.name)}</option>`)
@@ -1070,16 +1095,26 @@
       const target = personById(targetPerson.value);
       if (!source || !target || !mode) return;
 
-      const link = mode === "parent"
-        ? { type: "parent", from: target.id, to: source.id }
-        : { type: "spouse", from: source.id, to: target.id };
+      if (mode === "parent") {
+        addLink("parent", target.id, source.id);
+      }
 
-      const exists = state.links.some(existing =>
-        existing.type === link.type &&
-        ((existing.from === link.from && existing.to === link.to) ||
-        (link.type === "spouse" && existing.from === link.to && existing.to === link.from))
-      );
-      if (!exists) state.links.push(link);
+      if (mode === "spouse") {
+        addLink("spouse", source.id, target.id);
+      }
+
+      if (mode === "sibling") {
+        const sharedParentIds = [...new Set([...parentIdsFor(source.id), ...parentIdsFor(target.id)])];
+        if (!sharedParentIds.length) {
+          alert("Para ligar irmãos, primeiro liga pelo menos um pai/mãe a uma das pessoas.");
+          return;
+        }
+        for (const parentId of sharedParentIds) {
+          addLink("parent", parentId, source.id);
+          addLink("parent", parentId, target.id);
+        }
+      }
+
       closeRelationship();
       render();
     });
