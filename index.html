@@ -301,6 +301,56 @@
 
     .field textarea { resize: vertical; min-height: 74px; }
 
+    .lookup-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .lookup-row input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .lookup-row button {
+      white-space: nowrap;
+    }
+
+    .lookup-status {
+      min-height: 18px;
+      margin: -3px 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .lookup-results {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .lookup-results.hidden { display: none; }
+
+    .lookup-result {
+      width: 100%;
+      justify-content: flex-start;
+      text-align: left;
+      box-shadow: none;
+      display: grid;
+      gap: 3px;
+      padding: 10px;
+    }
+
+    .lookup-result strong {
+      font-size: 13px;
+    }
+
+    .lookup-result span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
     .row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -429,8 +479,13 @@
         <form id="personForm">
           <div class="field">
             <label for="name">Nome</label>
-            <input id="name" required />
+            <div class="lookup-row">
+              <input id="name" required />
+              <button type="button" id="lookupPerson">Pesquisar fontes</button>
+            </div>
           </div>
+          <div class="lookup-status" id="lookupStatus"></div>
+          <div class="lookup-results hidden" id="lookupResults"></div>
           <div class="row">
             <div class="field">
               <label for="birth">Nascimento</label>
@@ -530,6 +585,9 @@
     const genderField = document.getElementById("gender");
     const placeField = document.getElementById("place");
     const notesField = document.getElementById("notes");
+    const lookupPersonButton = document.getElementById("lookupPerson");
+    const lookupStatus = document.getElementById("lookupStatus");
+    const lookupResults = document.getElementById("lookupResults");
     const search = document.getElementById("search");
     const relationshipModal = document.getElementById("relationshipModal");
     const targetPerson = document.getElementById("targetPerson");
@@ -555,6 +613,118 @@
 
     function personById(id) {
       return state.people.find(person => person.id === id);
+    }
+
+    function apiUrl(params) {
+      const url = new URL("https://www.wikidata.org/w/api.php");
+      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+      url.searchParams.set("origin", "*");
+      url.searchParams.set("format", "json");
+      return url.toString();
+    }
+
+    async function fetchJson(url) {
+      const response = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+
+    function claimValue(entity, property) {
+      return entity?.claims?.[property]?.[0]?.mainsnak?.datavalue?.value || null;
+    }
+
+    function entityIdFromClaim(entity, property) {
+      return claimValue(entity, property)?.id || null;
+    }
+
+    function formatWikidataDate(value) {
+      if (!value?.time) return "";
+      const match = value.time.match(/[+-](\d{4,})(?:-(\d{2})-(\d{2}))?/);
+      if (!match) return "";
+      const year = match[1].replace(/^0+/, "") || "0";
+      const month = match[2];
+      const day = match[3];
+      if (!month || month === "00") return year;
+      if (!day || day === "00") return `${month}/${year}`;
+      return `${day}/${month}/${year}`;
+    }
+
+    async function labelsForIds(ids) {
+      const uniqueIds = [...new Set(ids.filter(Boolean))];
+      if (!uniqueIds.length) return {};
+      const data = await fetchJson(apiUrl({
+        action: "wbgetentities",
+        ids: uniqueIds.join("|"),
+        props: "labels",
+        languages: "pt|en"
+      }));
+      const labels = {};
+      for (const id of uniqueIds) {
+        const entity = data.entities?.[id];
+        labels[id] = entity?.labels?.pt?.value || entity?.labels?.en?.value || id;
+      }
+      return labels;
+    }
+
+    function genderFromLabel(label) {
+      const normalized = String(label || "").toLowerCase();
+      if (normalized.includes("femin")) return "feminino";
+      if (normalized.includes("mascul") || normalized.includes("male")) return "masculino";
+      return "outro";
+    }
+
+    async function searchPublicPerson(name) {
+      const searchData = await fetchJson(apiUrl({
+        action: "wbsearchentities",
+        search: name,
+        language: "pt",
+        uselang: "pt",
+        type: "item",
+        limit: "7"
+      }));
+      const ids = (searchData.search || []).map(result => result.id).join("|");
+      if (!ids) return [];
+
+      const entityData = await fetchJson(apiUrl({
+        action: "wbgetentities",
+        ids,
+        props: "labels|descriptions|claims|sitelinks",
+        languages: "pt|en|fr|es"
+      }));
+
+      const humanResults = Object.values(entityData.entities || {}).filter(entity => {
+        const instanceIds = entity.claims?.P31?.map(claim => claim.mainsnak?.datavalue?.value?.id) || [];
+        return instanceIds.includes("Q5");
+      });
+
+      const referencedIds = [];
+      for (const entity of humanResults) {
+        referencedIds.push(entityIdFromClaim(entity, "P19"));
+        referencedIds.push(entityIdFromClaim(entity, "P20"));
+        referencedIds.push(entityIdFromClaim(entity, "P21"));
+      }
+      const labels = await labelsForIds(referencedIds);
+
+      return humanResults.map(entity => {
+        const birthPlaceId = entityIdFromClaim(entity, "P19");
+        const deathPlaceId = entityIdFromClaim(entity, "P20");
+        const genderId = entityIdFromClaim(entity, "P21");
+        const birthDate = formatWikidataDate(claimValue(entity, "P569"));
+        const deathDate = formatWikidataDate(claimValue(entity, "P570"));
+        const places = [labels[birthPlaceId], labels[deathPlaceId]].filter(Boolean);
+        const sitelink = entity.sitelinks?.ptwiki?.url || entity.sitelinks?.enwiki?.url || `https://www.wikidata.org/wiki/${entity.id}`;
+
+        return {
+          id: entity.id,
+          name: entity.labels?.pt?.value || entity.labels?.en?.value || name,
+          description: entity.descriptions?.pt?.value || entity.descriptions?.en?.value || "Pessoa pública encontrada no Wikidata",
+          birth: birthDate,
+          death: deathDate,
+          place: [...new Set(places)].join(" / "),
+          gender: genderFromLabel(labels[genderId]),
+          source: sitelink
+        };
+      });
     }
 
     function applyTransform() {
@@ -688,6 +858,47 @@
       genderField.value = person.gender || "outro";
       placeField.value = person.place || "";
       notesField.value = person.notes || "";
+      clearLookupResults();
+    }
+
+    function clearLookupResults() {
+      lookupStatus.textContent = "";
+      lookupResults.innerHTML = "";
+      lookupResults.classList.add("hidden");
+    }
+
+    function showLookupResults(results) {
+      lookupResults.innerHTML = "";
+      lookupResults.classList.remove("hidden");
+
+      for (const result of results) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "lookup-result";
+        button.innerHTML = `
+          <strong>${escapeHtml(result.name)}</strong>
+          <span>${escapeHtml(result.description)}</span>
+          <span>${escapeHtml([result.birth, result.death, result.place].filter(Boolean).join(" | ") || "Sem datas/local estruturados")}</span>
+        `;
+        button.addEventListener("click", () => applyLookupResult(result));
+        lookupResults.appendChild(button);
+      }
+    }
+
+    function applyLookupResult(result) {
+      nameField.value = result.name || nameField.value;
+      birthField.value = result.birth || birthField.value;
+      deathField.value = result.death || deathField.value;
+      genderField.value = result.gender || genderField.value;
+      placeField.value = result.place || placeField.value;
+
+      const sourceLine = `Fonte pública: ${result.source}`;
+      if (!notesField.value.includes(sourceLine)) {
+        notesField.value = [notesField.value.trim(), sourceLine].filter(Boolean).join("\n");
+      }
+
+      lookupStatus.textContent = `Dados aplicados de ${result.id}. Confirma antes de guardar.`;
+      lookupResults.classList.add("hidden");
     }
 
     function startDrag(event) {
@@ -802,6 +1013,35 @@
 
     document.getElementById("addParent").addEventListener("click", () => openRelationship("parent"));
     document.getElementById("addSpouse").addEventListener("click", () => openRelationship("spouse"));
+
+    lookupPersonButton.addEventListener("click", async () => {
+      const name = nameField.value.trim();
+      if (!name) {
+        lookupStatus.textContent = "Escreve um nome antes de pesquisar.";
+        return;
+      }
+      lookupPersonButton.disabled = true;
+      lookupStatus.textContent = "A pesquisar fontes públicas...";
+      lookupResults.classList.add("hidden");
+      try {
+        const results = await searchPublicPerson(name);
+        if (!results.length) {
+          lookupStatus.textContent = "Não encontrei uma pessoa pública com esse nome.";
+          lookupResults.innerHTML = "";
+          lookupResults.classList.add("hidden");
+          return;
+        }
+        lookupStatus.textContent = results.length === 1
+          ? "Encontrei 1 resultado. Clica para aplicar."
+          : `Encontrei ${results.length} resultados. Escolhe o correto.`;
+        showLookupResults(results);
+      } catch (error) {
+        console.error(error);
+        lookupStatus.textContent = "A pesquisa falhou. Verifica a ligação à internet e tenta outra vez.";
+      } finally {
+        lookupPersonButton.disabled = false;
+      }
+    });
 
     function openRelationship(type) {
       const source = personById(selectedId);

@@ -9,6 +9,7 @@ Abre `index.html` no browser ou usa a versão publicada no GitHub Pages.
 Funcionalidades:
 
 - adicionar e editar pessoas
+- pesquisar dados públicos por nome via Wikidata
 - arrastar cartões no ecrã
 - ligar pai/mãe e casal
 - organizar automaticamente
@@ -21,5 +22,7 @@ Funcionalidades:
 ## Privacidade
 
 FAM TREE não tem servidor, login ou base de dados. Os dados de cada pessoa ficam guardados apenas no `localStorage` do browser dessa pessoa.
+
+A pesquisa por nome consulta fontes públicas diretamente a partir do browser. Só costuma encontrar pessoas com presença em bases públicas como Wikidata/Wikipedia; familiares privados normalmente não aparecem.
 
 Usa a opção `Exportar` para criar cópias de segurança em JSON. Quem limpar os dados do browser pode perder a árvore se não tiver exportado uma cópia.
