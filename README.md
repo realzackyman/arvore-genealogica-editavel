@@ -1,10 +1,10 @@
-# Árvore Genealógica Editável
+# FAM TREE
 
-HTML autónomo para construir uma árvore genealógica no navegador.
+Site estático para qualquer pessoa construir a sua própria árvore genealógica no navegador.
 
 ## Como usar
 
-Abre `arvore-genealogica-editavel.html` no browser.
+Abre `index.html` no browser ou usa a versão publicada no GitHub Pages.
 
 Funcionalidades:
 
@@ -17,4 +17,8 @@ Funcionalidades:
 - imprimir
 - guardar automaticamente no navegador
 
-Nota: os dados ficam guardados no `localStorage` do browser. Usa a opção `Exportar` para criar cópias de segurança em JSON.
+## Privacidade
+
+FAM TREE não tem servidor, login ou base de dados. Os dados de cada pessoa ficam guardados apenas no `localStorage` do browser dessa pessoa.
+
+Usa a opção `Exportar` para criar cópias de segurança em JSON. Quem limpar os dados do browser pode perder a árvore se não tiver exportado uma cópia.
