@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Árvore Genealógica Editável</title>
+  <style>
+    :root {
+      --bg: #f5f2eb;
+      --panel: #ffffff;
+      --ink: #24211d;
+      --muted: #706b62;
+      --line: #d7d0c3;
+      --accent: #1e6f68;
+      --accent-2: #b54c31;
+      --shadow: 0 12px 28px rgba(36, 33, 29, 0.12);
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      overflow: hidden;
+    }
+
+    button, input, textarea, select {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 9px 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 38px;
+    }
+
+    button:hover { border-color: #aaa295; }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.danger { color: #8d1f10; }
+    button.icon { width: 38px; justify-content: center; padding: 8px; }
+
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(12px);
+      z-index: 5;
+    }
+
+    .brand {
+      font-weight: 800;
+      margin-right: 6px;
+      white-space: nowrap;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      width: 100%;
+    }
+
+    .search {
+      margin-left: auto;
+      min-width: 190px;
+      max-width: 280px;
+      width: 22vw;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 11px;
+      background: #fff;
+    }
+
+    .stage-wrap {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 48px 48px;
+      background-color: var(--bg);
+    }
+
+    .stage {
+      position: absolute;
+      inset: 0;
+      transform-origin: 0 0;
+    }
+
+    svg.links {
+      position: absolute;
+      inset: 0;
+      width: 5000px;
+      height: 3500px;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    .person {
+      position: absolute;
+      width: 190px;
+      min-height: 106px;
+      background: var(--panel);
+      border: 1px solid #cfc7ba;
+      border-left: 6px solid var(--accent);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 10px 10px 9px;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .person:active { cursor: grabbing; }
+    .person.selected { outline: 3px solid rgba(30, 111, 104, 0.28); }
+    .person.dimmed { opacity: 0.28; }
+
+    .person.feminino { border-left-color: #9f4f87; }
+    .person.masculino { border-left-color: #2f6fab; }
+    .person.outro { border-left-color: #77736d; }
+
+    .person-name {
+      font-weight: 800;
+      font-size: 15px;
+      line-height: 1.2;
+      word-break: break-word;
+      margin-bottom: 4px;
+    }
+
+    .person-dates, .person-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .person-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 9px;
+    }
+
+    .person-actions button {
+      min-height: 28px;
+      padding: 4px 7px;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+
+    .side {
+      position: absolute;
+      right: 14px;
+      top: 14px;
+      width: 330px;
+      max-height: calc(100vh - 98px);
+      overflow: auto;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+      z-index: 4;
+    }
+
+    .side.hidden { display: none; }
+
+    .side h2 {
+      font-size: 17px;
+      margin: 0 0 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .field input, .field textarea, .field select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .field textarea { resize: vertical; min-height: 74px; }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+    }
+
+    .help {
+      position: absolute;
+      left: 14px;
+      bottom: 14px;
+      max-width: 520px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      z-index: 3;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 18, 15, 0.36);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      padding: 16px;
+    }
+
+    .modal-backdrop.show { display: flex; }
+
+    .modal {
+      width: min(560px, 100%);
+      background: #fff;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .modal h2 {
+      margin: 0 0 14px;
+      font-size: 19px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    @media (max-width: 760px) {
+      body { overflow: auto; }
+      .app { min-height: 100vh; height: auto; }
+      .topbar { align-items: flex-start; }
+      .toolbar { gap: 6px; }
+      .brand { width: 100%; }
+      .search { margin-left: 0; width: 100%; max-width: none; }
+      .stage-wrap { min-height: calc(100vh - 146px); }
+      .side {
+        left: 10px;
+        right: 10px;
+        top: 10px;
+        width: auto;
+        max-height: calc(100vh - 40px);
+      }
+      .help { display: none; }
+    }
+
+    @media print {
+      .topbar, .side, .help, .person-actions { display: none !important; }
+      body { overflow: visible; background: #fff; }
+      .stage-wrap { overflow: visible; background: #fff; }
+      .person { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">Árvore Genealógica</div>
+      <div class="toolbar">
+        <button class="primary" id="addPerson">+ Pessoa</button>
+        <button id="addParent">Ligar pai/mãe</button>
+        <button id="addSpouse">Ligar casal</button>
+        <button id="autoLayout">Organizar</button>
+        <button id="zoomOut" class="icon" title="Afastar">−</button>
+        <button id="zoomIn" class="icon" title="Aproximar">+</button>
+        <button id="exportJson">Exportar</button>
+        <button id="importJson">Importar</button>
+        <button id="printTree">Imprimir</button>
+        <button id="clearAll" class="danger">Limpar</button>
+        <input id="search" class="search" type="search" placeholder="Procurar pessoa..." />
+        <input id="importFile" class="file-input" type="file" accept="application/json" />
+      </div>
+    </header>
+
+    <main class="stage-wrap" id="stageWrap">
+      <div class="stage" id="stage">
+        <svg class="links" id="links"></svg>
+        <div id="peopleLayer"></div>
+      </div>
+      <aside class="side hidden" id="editor">
+        <h2>Editar pessoa</h2>
+        <form id="personForm">
+          <div class="field">
+            <label for="name">Nome</label>
+            <input id="name" required />
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="birth">Nascimento</label>
+              <input id="birth" placeholder="ex: 1948" />
+            </div>
+            <div class="field">
+              <label for="death">Falecimento</label>
+              <input id="death" placeholder="opcional" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="gender">Género</label>
+              <select id="gender">
+                <option value="outro">Outro / desconhecido</option>
+                <option value="feminino">Feminino</option>
+                <option value="masculino">Masculino</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="place">Local</label>
+              <input id="place" placeholder="ilha, cidade, país" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="notes">Notas</label>
+            <textarea id="notes" placeholder="história, profissão, memórias, documentos..."></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="deletePerson" class="danger">Apagar</button>
+            <button type="button" id="closeEditor">Fechar</button>
+            <button class="primary" type="submit">Guardar</button>
+          </div>
+        </form>
+      </aside>
+      <div class="help">
+        Arrasta pessoas para posicionar. Seleciona uma pessoa e usa “Ligar pai/mãe” ou “Ligar casal”. Tudo fica guardado neste navegador; exporta JSON para ter cópia.
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="relationshipModal">
+    <div class="modal">
+      <h2 id="relationshipTitle">Criar ligação</h2>
+      <div class="field">
+        <label for="targetPerson">Escolher pessoa</label>
+        <select id="targetPerson"></select>
+      </div>
+      <div class="modal-actions">
+        <button id="cancelRelationship">Cancelar</button>
+        <button id="confirmRelationship" class="primary">Ligar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "arvore-genealogica-editavel-v1";
+    const CARD_W = 190;
+    const CARD_H = 106;
+
+    const sampleData = {
+      people: [
+        { id: uid(), name: "Eu", birth: "", death: "", gender: "outro", place: "", notes: "", x: 720, y: 520 },
+        { id: uid(), name: "Mãe", birth: "", death: "", gender: "feminino", place: "", notes: "", x: 560, y: 320 },
+        { id: uid(), name: "Pai", birth: "", death: "", gender: "masculino", place: "", notes: "", x: 880, y: 320 },
+        { id: uid(), name: "Avó materna", birth: "", death: "", gender: "feminino", place: "", notes: "", x: 390, y: 120 },
+        { id: uid(), name: "Avô materno", birth: "", death: "", gender: "masculino", place: "", notes: "", x: 640, y: 120 }
+      ],
+      links: []
+    };
+    sampleData.links.push(
+      { type: "parent", from: sampleData.people[1].id, to: sampleData.people[0].id },
+      { type: "parent", from: sampleData.people[2].id, to: sampleData.people[0].id },
+      { type: "parent", from: sampleData.people[3].id, to: sampleData.people[1].id },
+      { type: "parent", from: sampleData.people[4].id, to: sampleData.people[1].id },
+      { type: "spouse", from: sampleData.people[1].id, to: sampleData.people[2].id },
+      { type: "spouse", from: sampleData.people[3].id, to: sampleData.people[4].id }
+    );
+
+    let state = loadState();
+    let selectedId = state.people[0]?.id || null;
+    let mode = null;
+    let scale = 1;
+    let pan = { x: 0, y: 0 };
+    let dragging = null;
+    let panning = null;
+
+    const stageWrap = document.getElementById("stageWrap");
+    const stage = document.getElementById("stage");
+    const linksEl = document.getElementById("links");
+    const peopleLayer = document.getElementById("peopleLayer");
+    const editor = document.getElementById("editor");
+    const form = document.getElementById("personForm");
+    const nameField = document.getElementById("name");
+    const birthField = document.getElementById("birth");
+    const deathField = document.getElementById("death");
+    const genderField = document.getElementById("gender");
+    const placeField = document.getElementById("place");
+    const notesField = document.getElementById("notes");
+    const search = document.getElementById("search");
+    const relationshipModal = document.getElementById("relationshipModal");
+    const targetPerson = document.getElementById("targetPerson");
+
+    function uid() {
+      return "p_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    }
+
+    function loadState() {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) return JSON.parse(stored);
+      } catch (error) {
+        console.warn("Não foi possível carregar dados guardados.", error);
+      }
+      return structuredClone(sampleData);
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function personById(id) {
+      return state.people.find(person => person.id === id);
+    }
+
+    function applyTransform() {
+      stage.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
+    }
+
+    function render() {
+      renderLinks();
+      renderPeople();
+      openEditor(selectedId);
+      saveState();
+    }
+
+    function renderLinks() {
+      linksEl.innerHTML = "";
+      const validLinks = state.links.filter(link => personById(link.from) && personById(link.to));
+      state.links = validLinks;
+
+      for (const link of validLinks) {
+        const from = personById(link.from);
+        const to = personById(link.to);
+        const x1 = from.x + CARD_W / 2;
+        const y1 = link.type === "parent" ? from.y + CARD_H : from.y + CARD_H / 2;
+        const x2 = to.x + CARD_W / 2;
+        const y2 = link.type === "parent" ? to.y : to.y + CARD_H / 2;
+
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        if (link.type === "parent") {
+          const midY = (y1 + y2) / 2;
+          path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
+          path.setAttribute("stroke", "#56766f");
+        } else {
+          path.setAttribute("d", `M ${x1} ${y1} L ${x2} ${y2}`);
+          path.setAttribute("stroke", "#b54c31");
+          path.setAttribute("stroke-dasharray", "7 6");
+        }
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke-width", "3");
+        path.setAttribute("stroke-linecap", "round");
+        linksEl.appendChild(path);
+      }
+    }
+
+    function renderPeople() {
+      const q = search.value.trim().toLowerCase();
+      peopleLayer.innerHTML = "";
+
+      for (const person of state.people) {
+        const card = document.createElement("article");
+        card.className = `person ${person.gender || "outro"}`;
+        if (person.id === selectedId) card.classList.add("selected");
+        if (q && ![person.name, person.birth, person.death, person.place, person.notes].join(" ").toLowerCase().includes(q)) {
+          card.classList.add("dimmed");
+        }
+        card.style.left = `${person.x}px`;
+        card.style.top = `${person.y}px`;
+        card.dataset.id = person.id;
+
+        const dates = [person.birth, person.death].filter(Boolean).join(" - ");
+        card.innerHTML = `
+          <div class="person-name">${escapeHtml(person.name || "Sem nome")}</div>
+          <div class="person-dates">${escapeHtml(dates || "datas por preencher")}</div>
+          <div class="person-meta">${escapeHtml(person.place || "local por preencher")}</div>
+          <div class="person-actions">
+            <button type="button" data-action="edit">Editar</button>
+            <button type="button" data-action="child">+ Filho/a</button>
+          </div>
+        `;
+
+        card.addEventListener("pointerdown", startDrag);
+        card.addEventListener("click", event => {
+          event.stopPropagation();
+          selectedId = person.id;
+          render();
+        });
+        card.querySelector('[data-action="edit"]').addEventListener("click", event => {
+          event.stopPropagation();
+          selectedId = person.id;
+          openEditor(person.id, true);
+          renderPeople();
+        });
+        card.querySelector('[data-action="child"]').addEventListener("click", event => {
+          event.stopPropagation();
+          addChild(person.id);
+        });
+        peopleLayer.appendChild(card);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value || "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      }[char]));
+    }
+
+    function openEditor(id, force = false) {
+      const person = personById(id);
+      if (!person) {
+        editor.classList.add("hidden");
+        return;
+      }
+      if (!force && document.activeElement && editor.contains(document.activeElement)) return;
+      editor.classList.remove("hidden");
+      nameField.value = person.name || "";
+      birthField.value = person.birth || "";
+      deathField.value = person.death || "";
+      genderField.value = person.gender || "outro";
+      placeField.value = person.place || "";
+      notesField.value = person.notes || "";
+    }
+
+    function startDrag(event) {
+      if (event.target.closest("button")) return;
+      const card = event.currentTarget;
+      selectedId = card.dataset.id;
+      const person = personById(selectedId);
+      dragging = {
+        id: selectedId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originalX: person.x,
+        originalY: person.y
+      };
+      card.setPointerCapture(event.pointerId);
+      renderPeople();
+    }
+
+    window.addEventListener("pointermove", event => {
+      if (dragging) {
+        const person = personById(dragging.id);
+        person.x = dragging.originalX + (event.clientX - dragging.startX) / scale;
+        person.y = dragging.originalY + (event.clientY - dragging.startY) / scale;
+        renderLinks();
+        const card = document.querySelector(`[data-id="${dragging.id}"]`);
+        if (card) {
+          card.style.left = `${person.x}px`;
+          card.style.top = `${person.y}px`;
+        }
+        saveState();
+      }
+      if (panning) {
+        pan.x = panning.originalX + event.clientX - panning.startX;
+        pan.y = panning.originalY + event.clientY - panning.startY;
+        applyTransform();
+      }
+    });
+
+    window.addEventListener("pointerup", () => {
+      dragging = null;
+      panning = null;
+    });
+
+    stageWrap.addEventListener("pointerdown", event => {
+      if (event.target !== stageWrap && event.target !== stage && event.target !== linksEl) return;
+      selectedId = null;
+      editor.classList.add("hidden");
+      panning = { startX: event.clientX, startY: event.clientY, originalX: pan.x, originalY: pan.y };
+      renderPeople();
+    });
+
+    stageWrap.addEventListener("wheel", event => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const next = Math.min(1.8, Math.max(0.45, scale + (event.deltaY < 0 ? 0.08 : -0.08)));
+      scale = next;
+      applyTransform();
+    }, { passive: false });
+
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const person = personById(selectedId);
+      if (!person) return;
+      person.name = nameField.value.trim() || "Sem nome";
+      person.birth = birthField.value.trim();
+      person.death = deathField.value.trim();
+      person.gender = genderField.value;
+      person.place = placeField.value.trim();
+      person.notes = notesField.value.trim();
+      render();
+    });
+
+    document.getElementById("addPerson").addEventListener("click", () => {
+      const person = {
+        id: uid(),
+        name: "Nova pessoa",
+        birth: "",
+        death: "",
+        gender: "outro",
+        place: "",
+        notes: "",
+        x: 560 + Math.random() * 260,
+        y: 280 + Math.random() * 180
+      };
+      state.people.push(person);
+      selectedId = person.id;
+      render();
+      openEditor(person.id, true);
+      nameField.focus();
+      nameField.select();
+    });
+
+    function addChild(parentId) {
+      const parent = personById(parentId);
+      if (!parent) return;
+      const child = {
+        id: uid(),
+        name: "Filho/a de " + parent.name,
+        birth: "",
+        death: "",
+        gender: "outro",
+        place: "",
+        notes: "",
+        x: parent.x,
+        y: parent.y + 220
+      };
+      state.people.push(child);
+      state.links.push({ type: "parent", from: parent.id, to: child.id });
+      selectedId = child.id;
+      render();
+    }
+
+    document.getElementById("addParent").addEventListener("click", () => openRelationship("parent"));
+    document.getElementById("addSpouse").addEventListener("click", () => openRelationship("spouse"));
+
+    function openRelationship(type) {
+      const source = personById(selectedId);
+      if (!source) {
+        alert("Seleciona primeiro uma pessoa na árvore.");
+        return;
+      }
+      mode = type;
+      document.getElementById("relationshipTitle").textContent = type === "parent"
+        ? `Escolher pai/mãe de ${source.name}`
+        : `Escolher cônjuge/par de ${source.name}`;
+      targetPerson.innerHTML = state.people
+        .filter(person => person.id !== source.id)
+        .map(person => `<option value="${person.id}">${escapeHtml(person.name)}</option>`)
+        .join("");
+      relationshipModal.classList.add("show");
+    }
+
+    document.getElementById("cancelRelationship").addEventListener("click", closeRelationship);
+    relationshipModal.addEventListener("click", event => {
+      if (event.target === relationshipModal) closeRelationship();
+    });
+
+    document.getElementById("confirmRelationship").addEventListener("click", () => {
+      const source = personById(selectedId);
+      const target = personById(targetPerson.value);
+      if (!source || !target || !mode) return;
+
+      const link = mode === "parent"
+        ? { type: "parent", from: target.id, to: source.id }
+        : { type: "spouse", from: source.id, to: target.id };
+
+      const exists = state.links.some(existing =>
+        existing.type === link.type &&
+        ((existing.from === link.from && existing.to === link.to) ||
+        (link.type === "spouse" && existing.from === link.to && existing.to === link.from))
+      );
+      if (!exists) state.links.push(link);
+      closeRelationship();
+      render();
+    });
+
+    function closeRelationship() {
+      mode = null;
+      relationshipModal.classList.remove("show");
+    }
+
+    document.getElementById("deletePerson").addEventListener("click", () => {
+      const person = personById(selectedId);
+      if (!person) return;
+      if (!confirm(`Apagar ${person.name} e todas as ligações desta pessoa?`)) return;
+      state.people = state.people.filter(item => item.id !== selectedId);
+      state.links = state.links.filter(link => link.from !== selectedId && link.to !== selectedId);
+      selectedId = state.people[0]?.id || null;
+      render();
+    });
+
+    document.getElementById("closeEditor").addEventListener("click", () => {
+      selectedId = null;
+      editor.classList.add("hidden");
+      renderPeople();
+    });
+
+    document.getElementById("autoLayout").addEventListener("click", autoLayout);
+
+    function autoLayout() {
+      const children = new Map();
+      const hasParent = new Set();
+      for (const link of state.links.filter(item => item.type === "parent")) {
+        if (!children.has(link.from)) children.set(link.from, []);
+        children.get(link.from).push(link.to);
+        hasParent.add(link.to);
+      }
+
+      const roots = state.people.filter(person => !hasParent.has(person.id));
+      const levels = new Map();
+      const queue = roots.length ? roots.map(person => [person.id, 0]) : state.people.map(person => [person.id, 0]);
+
+      while (queue.length) {
+        const [id, level] = queue.shift();
+        if (levels.has(id) && levels.get(id) <= level) continue;
+        levels.set(id, level);
+        for (const childId of children.get(id) || []) queue.push([childId, level + 1]);
+      }
+
+      for (const person of state.people) {
+        if (!levels.has(person.id)) levels.set(person.id, 0);
+      }
+
+      const grouped = {};
+      for (const person of state.people) {
+        const level = levels.get(person.id);
+        grouped[level] ||= [];
+        grouped[level].push(person);
+      }
+
+      Object.keys(grouped).sort((a, b) => Number(a) - Number(b)).forEach(level => {
+        grouped[level].forEach((person, index) => {
+          person.x = 180 + index * 260;
+          person.y = 100 + Number(level) * 230;
+        });
+      });
+      pan = { x: 40, y: 20 };
+      scale = 1;
+      applyTransform();
+      render();
+    }
+
+    document.getElementById("zoomIn").addEventListener("click", () => {
+      scale = Math.min(1.8, scale + 0.1);
+      applyTransform();
+    });
+
+    document.getElementById("zoomOut").addEventListener("click", () => {
+      scale = Math.max(0.45, scale - 0.1);
+      applyTransform();
+    });
+
+    search.addEventListener("input", renderPeople);
+
+    document.getElementById("exportJson").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "arvore-genealogica.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("importJson").addEventListener("click", () => {
+      document.getElementById("importFile").click();
+    });
+
+    document.getElementById("importFile").addEventListener("change", event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const imported = JSON.parse(reader.result);
+          if (!Array.isArray(imported.people) || !Array.isArray(imported.links)) {
+            throw new Error("Formato inválido");
+          }
+          state = imported;
+          selectedId = state.people[0]?.id || null;
+          render();
+        } catch (error) {
+          alert("Não consegui importar este ficheiro JSON.");
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = "";
+    });
+
+    document.getElementById("printTree").addEventListener("click", () => window.print());
+
+    document.getElementById("clearAll").addEventListener("click", () => {
+      if (!confirm("Limpar toda a árvore neste navegador? Exporta antes se quiseres guardar cópia.")) return;
+      state = { people: [], links: [] };
+      selectedId = null;
+      render();
+    });
+
+    window.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        closeRelationship();
+        selectedId = null;
+        editor.classList.add("hidden");
+        renderPeople();
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveState();
+      }
+    });
+
+    applyTransform();
+    render();
+  </script>
+</body>
+</html>
