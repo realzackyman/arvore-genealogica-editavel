@@ -13,6 +13,7 @@ Funcionalidades:
 - ligar pai/mãe e casal
 - organizar automaticamente
 - procurar pessoas
+- alternar entre modo claro e modo escuro
 - exportar e importar JSON
 - imprimir
 - guardar automaticamente no navegador

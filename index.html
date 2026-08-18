@@ -4,18 +4,59 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FAM TREE</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2311685f'/%3E%3Cpath d='M32 13v38M20 25h24M17 39h30' stroke='%23fffdf8' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='13' r='6' fill='%23df815f'/%3E%3Ccircle cx='20' cy='25' r='5' fill='%23fffdf8'/%3E%3Ccircle cx='44' cy='25' r='5' fill='%23fffdf8'/%3E%3Ccircle cx='17' cy='39' r='5' fill='%23fffdf8'/%3E%3Ccircle cx='47' cy='39' r='5' fill='%23fffdf8'/%3E%3C/svg%3E" />
+  <script>
+    try {
+      const storedTheme = localStorage.getItem("fam-tree-theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = storedTheme || (prefersDark ? "dark" : "light");
+    } catch (error) {
+      document.documentElement.dataset.theme = "light";
+    }
+  </script>
   <style>
     :root {
-      --bg: #f5f2eb;
-      --panel: #ffffff;
-      --ink: #24211d;
-      --muted: #706b62;
-      --line: #d7d0c3;
-      --accent: #1e6f68;
-      --accent-2: #b54c31;
-      --shadow: 0 12px 28px rgba(36, 33, 29, 0.12);
+      color-scheme: light;
+      --bg: #f4f0e8;
+      --bg-soft: #ebe2d4;
+      --panel: rgba(255, 253, 248, 0.94);
+      --panel-strong: #fffdf8;
+      --ink: #231f1a;
+      --muted: #6e665a;
+      --line: #d6cabb;
+      --line-soft: rgba(116, 101, 84, 0.16);
+      --accent: #11685f;
+      --accent-ink: #ffffff;
+      --accent-2: #a8472e;
+      --parent-line: #376f67;
+      --spouse-line: #a8472e;
+      --danger: #9b2c1c;
+      --focus: rgba(17, 104, 95, 0.26);
+      --shadow: 0 18px 45px rgba(45, 36, 26, 0.16);
+      --shadow-tight: 0 8px 18px rgba(45, 36, 26, 0.12);
       --radius: 8px;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Avenir Next", Avenir, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #101316;
+      --bg-soft: #171d22;
+      --panel: rgba(25, 29, 33, 0.94);
+      --panel-strong: #1f252a;
+      --ink: #f3efe6;
+      --muted: #aaa296;
+      --line: #3d454b;
+      --line-soft: rgba(208, 197, 180, 0.12);
+      --accent: #5cb9ad;
+      --accent-ink: #071513;
+      --accent-2: #df815f;
+      --parent-line: #7fc7bc;
+      --spouse-line: #e19577;
+      --danger: #ff9a86;
+      --focus: rgba(92, 185, 173, 0.28);
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.38);
+      --shadow-tight: 0 8px 20px rgba(0, 0, 0, 0.28);
     }
 
     * { box-sizing: border-box; }
@@ -23,7 +64,9 @@
     body {
       margin: 0;
       min-height: 100vh;
-      background: var(--bg);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(168, 71, 46, 0.10), transparent 34%),
+        linear-gradient(135deg, var(--bg), var(--bg-soft));
       color: var(--ink);
       overflow: hidden;
     }
@@ -34,7 +77,7 @@
 
     button {
       border: 1px solid var(--line);
-      background: #fff;
+      background: var(--panel-strong);
       color: var(--ink);
       border-radius: 8px;
       padding: 9px 12px;
@@ -43,11 +86,17 @@
       align-items: center;
       gap: 7px;
       min-height: 38px;
+      box-shadow: var(--shadow-tight);
+      transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
     }
 
-    button:hover { border-color: #aaa295; }
-    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-    button.danger { color: #8d1f10; }
+    button:hover { border-color: var(--accent); transform: translateY(-1px); }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+    button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    button.danger { color: var(--danger); }
     button.icon { width: 38px; justify-content: center; padding: 8px; }
 
     .app {
@@ -59,18 +108,24 @@
     .topbar {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 14px;
       padding: 12px 14px;
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--panel);
       border-bottom: 1px solid var(--line);
       backdrop-filter: blur(12px);
       z-index: 5;
+      box-shadow: 0 1px 0 var(--line-soft);
     }
 
     .brand {
-      font-weight: 800;
-      margin-right: 6px;
+      font-weight: 900;
+      font-size: 18px;
+      letter-spacing: 0.06em;
       white-space: nowrap;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--panel-strong), transparent);
     }
 
     .toolbar {
@@ -81,6 +136,24 @@
       width: 100%;
     }
 
+    .toolbar-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .privacy-pill {
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      background: var(--panel-strong);
+    }
+
     .search {
       margin-left: auto;
       min-width: 190px;
@@ -89,15 +162,18 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 9px 11px;
-      background: #fff;
+      background: var(--panel-strong);
+      color: var(--ink);
+      box-shadow: inset 0 1px 0 var(--line-soft);
     }
 
     .stage-wrap {
       position: relative;
       overflow: hidden;
       background:
-        linear-gradient(var(--line) 1px, transparent 1px),
-        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+        linear-gradient(var(--line-soft) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line-soft) 1px, transparent 1px),
+        radial-gradient(circle at 48px 48px, var(--line-soft) 2px, transparent 3px);
       background-size: 48px 48px;
       background-color: var(--bg);
     }
@@ -122,22 +198,29 @@
       width: 190px;
       min-height: 106px;
       background: var(--panel);
-      border: 1px solid #cfc7ba;
+      border: 1px solid var(--line);
       border-left: 6px solid var(--accent);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding: 10px 10px 9px;
       cursor: grab;
       user-select: none;
+      backdrop-filter: blur(10px);
+      transition: opacity 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
     }
 
     .person:active { cursor: grabbing; }
-    .person.selected { outline: 3px solid rgba(30, 111, 104, 0.28); }
+    .person:hover { transform: translateY(-2px); }
+    .person.selected { outline: 3px solid var(--focus); box-shadow: 0 20px 60px rgba(17, 104, 95, 0.22); }
     .person.dimmed { opacity: 0.28; }
 
-    .person.feminino { border-left-color: #9f4f87; }
-    .person.masculino { border-left-color: #2f6fab; }
-    .person.outro { border-left-color: #77736d; }
+    .person.feminino { border-left-color: #a6508b; }
+    .person.masculino { border-left-color: #356fa7; }
+    .person.outro { border-left-color: #817667; }
+
+    html[data-theme="dark"] .person.feminino { border-left-color: #e08cc7; }
+    html[data-theme="dark"] .person.masculino { border-left-color: #8dbcf4; }
+    html[data-theme="dark"] .person.outro { border-left-color: #beb4a5; }
 
     .person-name {
       font-weight: 800;
@@ -145,6 +228,7 @@
       line-height: 1.2;
       word-break: break-word;
       margin-bottom: 4px;
+      letter-spacing: 0;
     }
 
     .person-dates, .person-meta {
@@ -165,6 +249,7 @@
       padding: 4px 7px;
       font-size: 12px;
       border-radius: 6px;
+      box-shadow: none;
     }
 
     .side {
@@ -174,12 +259,13 @@
       width: 330px;
       max-height: calc(100vh - 98px);
       overflow: auto;
-      background: rgba(255, 255, 255, 0.96);
+      background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding: 14px;
       z-index: 4;
+      backdrop-filter: blur(16px);
     }
 
     .side.hidden { display: none; }
@@ -187,6 +273,7 @@
     .side h2 {
       font-size: 17px;
       margin: 0 0 12px;
+      letter-spacing: 0;
     }
 
     .field {
@@ -208,7 +295,7 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 9px 10px;
-      background: #fff;
+      background: var(--panel-strong);
       color: var(--ink);
     }
 
@@ -225,19 +312,21 @@
       left: 14px;
       bottom: 14px;
       max-width: 520px;
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
       padding: 10px 12px;
       color: var(--muted);
       font-size: 13px;
       z-index: 3;
+      box-shadow: var(--shadow-tight);
+      backdrop-filter: blur(12px);
     }
 
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(20, 18, 15, 0.36);
+      background: rgba(12, 12, 12, 0.48);
       display: none;
       align-items: center;
       justify-content: center;
@@ -249,7 +338,7 @@
 
     .modal {
       width: min(560px, 100%);
-      background: #fff;
+      background: var(--panel-strong);
       border-radius: var(--radius);
       border: 1px solid var(--line);
       box-shadow: var(--shadow);
@@ -275,10 +364,14 @@
     @media (max-width: 760px) {
       body { overflow: auto; }
       .app { min-height: 100vh; height: auto; }
-      .topbar { align-items: flex-start; }
+      .topbar { display: block; }
       .toolbar { gap: 6px; }
-      .brand { width: 100%; }
+      .brand { display: inline-flex; margin-bottom: 10px; }
+      .toolbar-group { width: 100%; }
+      .toolbar-group button { flex: 1 1 auto; }
+      .privacy-pill { width: 100%; text-align: center; }
       .search { margin-left: 0; width: 100%; max-width: none; }
+      .row { grid-template-columns: 1fr; }
       .stage-wrap { min-height: calc(100vh - 146px); }
       .side {
         left: 10px;
@@ -303,16 +396,24 @@
     <header class="topbar">
       <div class="brand">FAM TREE</div>
       <div class="toolbar">
-        <button class="primary" id="addPerson">+ Pessoa</button>
-        <button id="addParent">Ligar pai/mãe</button>
-        <button id="addSpouse">Ligar casal</button>
-        <button id="autoLayout">Organizar</button>
-        <button id="zoomOut" class="icon" title="Afastar">−</button>
-        <button id="zoomIn" class="icon" title="Aproximar">+</button>
-        <button id="exportJson">Exportar</button>
-        <button id="importJson">Importar</button>
-        <button id="printTree">Imprimir</button>
-        <button id="clearAll" class="danger">Limpar</button>
+        <div class="toolbar-group">
+          <button class="primary" id="addPerson">+ Pessoa</button>
+          <button id="addParent">Ligar pai/mãe</button>
+          <button id="addSpouse">Ligar casal</button>
+          <button id="autoLayout">Organizar</button>
+        </div>
+        <div class="toolbar-group">
+          <button id="zoomOut" class="icon" title="Afastar">−</button>
+          <button id="zoomIn" class="icon" title="Aproximar">+</button>
+          <button id="themeToggle" title="Alternar modo escuro">Modo escuro</button>
+        </div>
+        <div class="toolbar-group">
+          <button id="exportJson">Exportar</button>
+          <button id="importJson">Importar</button>
+          <button id="printTree">Imprimir</button>
+          <button id="clearAll" class="danger">Limpar</button>
+        </div>
+        <div class="privacy-pill">Dados só neste browser</div>
         <input id="search" class="search" type="search" placeholder="Procurar pessoa..." />
         <input id="importFile" class="file-input" type="file" accept="application/json" />
       </div>
@@ -432,6 +533,7 @@
     const search = document.getElementById("search");
     const relationshipModal = document.getElementById("relationshipModal");
     const targetPerson = document.getElementById("targetPerson");
+    const themeToggle = document.getElementById("themeToggle");
 
     function uid() {
       return "p_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -459,6 +561,30 @@
       stage.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
     }
 
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function currentTheme() {
+      return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    }
+
+    function updateThemeButton() {
+      themeToggle.textContent = currentTheme() === "dark" ? "Modo claro" : "Modo escuro";
+      themeToggle.setAttribute("aria-pressed", currentTheme() === "dark" ? "true" : "false");
+    }
+
+    function setTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      try {
+        localStorage.setItem("fam-tree-theme", theme);
+      } catch (error) {
+        console.warn("Não foi possível guardar o tema escolhido.", error);
+      }
+      updateThemeButton();
+      renderLinks();
+    }
+
     function render() {
       renderLinks();
       renderPeople();
@@ -483,10 +609,10 @@
         if (link.type === "parent") {
           const midY = (y1 + y2) / 2;
           path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
-          path.setAttribute("stroke", "#56766f");
+          path.setAttribute("stroke", cssVar("--parent-line"));
         } else {
           path.setAttribute("d", `M ${x1} ${y1} L ${x2} ${y2}`);
-          path.setAttribute("stroke", "#b54c31");
+          path.setAttribute("stroke", cssVar("--spouse-line"));
           path.setAttribute("stroke-dasharray", "7 6");
         }
         path.setAttribute("fill", "none");
@@ -794,6 +920,10 @@
       applyTransform();
     });
 
+    themeToggle.addEventListener("click", () => {
+      setTheme(currentTheme() === "dark" ? "light" : "dark");
+    });
+
     search.addEventListener("input", renderPeople);
 
     document.getElementById("exportJson").addEventListener("click", () => {
@@ -853,6 +983,7 @@
       }
     });
 
+    updateThemeButton();
     applyTransform();
     render();
   </script>
