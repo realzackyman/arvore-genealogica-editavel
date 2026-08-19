@@ -13,6 +13,7 @@ Funcionalidades:
 - pesquisar dados públicos por nome via Wikidata
 - arrastar cartões no ecrã
 - ligar pai/mãe, irmãos e casal
+- definir relações directamente no editor da pessoa
 - organizar automaticamente
 - procurar pessoas
 - alternar entre modo claro e modo escuro
