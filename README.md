@@ -14,7 +14,7 @@ Funcionalidades:
 - arrastar cartões no ecrã
 - ligar pai/mãe, irmãos, meio-irmãos e casal
 - definir relações directamente no editor da pessoa
-- organizar automaticamente
+- organizar automaticamente com presets Balanced, Compact, Wide e Print fit
 - procurar pessoas
 - alternar entre modo claro e modo escuro
 - exportar e importar JSON

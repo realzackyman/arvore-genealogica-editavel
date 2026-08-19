@@ -154,6 +154,16 @@
       background: var(--panel-strong);
     }
 
+    .layout-select {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: var(--panel-strong);
+      color: var(--ink);
+      box-shadow: var(--shadow-tight);
+    }
+
     .search {
       margin-left: auto;
       min-width: 190px;
@@ -492,9 +502,28 @@
 
     @media print {
       .topbar, .side, .help, .person-actions { display: none !important; }
-      body { overflow: visible; background: #fff; }
-      .stage-wrap { overflow: visible; background: #fff; }
-      .person { box-shadow: none; }
+      @page { size: A4 landscape; margin: 8mm; }
+      html, body, .app { width: 100%; height: 100%; overflow: hidden; background: #fff; }
+      .app { display: block; }
+      .stage-wrap {
+        width: 281mm;
+        height: 194mm;
+        overflow: hidden;
+        background: #fff;
+        position: relative;
+        break-after: avoid;
+      }
+      .stage {
+        position: absolute;
+        inset: 0 auto auto 0;
+        transform: translate(var(--print-offset-x, 0px), var(--print-offset-y, 0px)) scale(var(--print-scale, 1)) !important;
+      }
+      .person {
+        box-shadow: none;
+        background: #fff;
+        color: #231f1a;
+        break-inside: avoid;
+      }
     }
   </style>
 </head>
@@ -508,6 +537,12 @@
           <button id="addParent">Ligar pai/mãe</button>
           <button id="addSibling">Ligar irmão/ã</button>
           <button id="addSpouse">Ligar casal</button>
+          <select id="layoutPreset" class="layout-select" title="Preset de organização">
+            <option value="balanced">Balanced</option>
+            <option value="compact">Compact</option>
+            <option value="wide">Wide</option>
+            <option value="print">Print fit</option>
+          </select>
           <button id="autoLayout">Organizar</button>
         </div>
         <div class="toolbar-group">
@@ -682,6 +717,7 @@
     const relationshipModal = document.getElementById("relationshipModal");
     const targetPerson = document.getElementById("targetPerson");
     const themeToggle = document.getElementById("themeToggle");
+    const layoutPreset = document.getElementById("layoutPreset");
 
     function uid() {
       return "p_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -1439,9 +1475,11 @@
       renderPeople();
     });
 
-    document.getElementById("autoLayout").addEventListener("click", autoLayout);
+    document.getElementById("autoLayout").addEventListener("click", () => applyLayoutPreset(layoutPreset.value));
 
-    function autoLayout() {
+    layoutPreset.addEventListener("change", () => applyLayoutPreset(layoutPreset.value));
+
+    function generationLevels() {
       const children = new Map();
       const hasParent = new Set();
       for (const link of state.links.filter(item => item.type === "parent")) {
@@ -1464,24 +1502,109 @@
       for (const person of state.people) {
         if (!levels.has(person.id)) levels.set(person.id, 0);
       }
+      return levels;
+    }
 
+    function groupedByLevel(levels) {
       const grouped = {};
       for (const person of state.people) {
         const level = levels.get(person.id);
         grouped[level] ||= [];
         grouped[level].push(person);
       }
+      return grouped;
+    }
 
-      Object.keys(grouped).sort((a, b) => Number(a) - Number(b)).forEach(level => {
-        grouped[level].forEach((person, index) => {
-          person.x = 180 + index * 260;
-          person.y = 100 + Number(level) * 230;
+    function parentSortValue(person, previousOrder) {
+      const parents = parentIdsFor(person.id).map(id => previousOrder.get(id)).filter(value => value !== undefined);
+      if (!parents.length) return Number.MAX_SAFE_INTEGER;
+      return parents.reduce((sum, value) => sum + value, 0) / parents.length;
+    }
+
+    function orderedGenerationRows(grouped) {
+      const levelKeys = Object.keys(grouped).map(Number).sort((a, b) => a - b);
+      let previousOrder = new Map();
+      const rows = [];
+
+      for (const level of levelKeys) {
+        const people = [...grouped[level]].sort((a, b) => {
+          const parentDelta = parentSortValue(a, previousOrder) - parentSortValue(b, previousOrder);
+          if (parentDelta !== 0) return parentDelta;
+          return (a.name || "").localeCompare(b.name || "", "pt");
         });
-      });
-      pan = { x: 40, y: 20 };
-      scale = 1;
-      applyTransform();
+        rows.push({ level, people });
+        previousOrder = new Map(people.map((person, index) => [person.id, index]));
+      }
+      return rows;
+    }
+
+    function layoutOptions(preset) {
+      const options = {
+        balanced: { xGap: 250, yGap: 220, left: 160, top: 100, fit: true, maxScale: 1 },
+        compact: { xGap: 210, yGap: 165, left: 120, top: 90, fit: true, maxScale: 1.05 },
+        wide: { xGap: 310, yGap: 245, left: 180, top: 110, fit: true, maxScale: 0.95 },
+        print: { xGap: 205, yGap: 150, left: 70, top: 60, fit: true, maxScale: 0.9 }
+      };
+      return options[preset] || options.balanced;
+    }
+
+    function applyLayoutPreset(preset = "balanced", options = {}) {
+      if (!state.people.length) return;
+      const config = { ...layoutOptions(preset), ...options };
+      const rows = orderedGenerationRows(groupedByLevel(generationLevels()));
+      const maxCount = Math.max(...rows.map(row => row.people.length));
+
+      for (const row of rows) {
+        const rowOffset = ((maxCount - row.people.length) * config.xGap) / 2;
+        row.people.forEach((person, index) => {
+          person.x = config.left + rowOffset + index * config.xGap;
+          person.y = config.top + row.level * config.yGap;
+        });
+      }
+
+      if (config.fit) {
+        fitTreeToViewport(28, config.maxScale);
+      } else {
+        pan = { x: 0, y: 0 };
+        scale = 1;
+        applyTransform();
+      }
       render();
+    }
+
+    function treeBounds() {
+      if (!state.people.length) return { minX: 0, minY: 0, maxX: CARD_W, maxY: CARD_H, width: CARD_W, height: CARD_H };
+      const minX = Math.min(...state.people.map(person => person.x));
+      const minY = Math.min(...state.people.map(person => person.y));
+      const maxX = Math.max(...state.people.map(person => person.x + CARD_W));
+      const maxY = Math.max(...state.people.map(person => person.y + CARD_H));
+      return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+    }
+
+    function fitTreeToViewport(margin = 32, maxScale = 1) {
+      const bounds = treeBounds();
+      const availableWidth = Math.max(320, stageWrap.clientWidth - margin * 2);
+      const availableHeight = Math.max(260, stageWrap.clientHeight - margin * 2);
+      scale = Math.min(maxScale, availableWidth / bounds.width, availableHeight / bounds.height);
+      pan = {
+        x: margin + (availableWidth - bounds.width * scale) / 2 - bounds.minX * scale,
+        y: margin + (availableHeight - bounds.height * scale) / 2 - bounds.minY * scale
+      };
+      applyTransform();
+    }
+
+    function preparePrintLayout() {
+      applyLayoutPreset("print", { fit: false });
+      const bounds = treeBounds();
+      const pageWidth = 1062;
+      const pageHeight = 733;
+      const margin = 20;
+      const printScale = Math.min(1, (pageWidth - margin * 2) / bounds.width, (pageHeight - margin * 2) / bounds.height);
+      const offsetX = margin + (pageWidth - bounds.width * printScale) / 2 - bounds.minX * printScale;
+      const offsetY = margin - bounds.minY * printScale;
+      document.documentElement.style.setProperty("--print-scale", String(printScale));
+      document.documentElement.style.setProperty("--print-offset-x", `${offsetX}px`);
+      document.documentElement.style.setProperty("--print-offset-y", `${offsetY}px`);
     }
 
     document.getElementById("zoomIn").addEventListener("click", () => {
@@ -1535,7 +1658,11 @@
       event.target.value = "";
     });
 
-    document.getElementById("printTree").addEventListener("click", () => window.print());
+    document.getElementById("printTree").addEventListener("click", () => {
+      layoutPreset.value = "print";
+      preparePrintLayout();
+      window.print();
+    });
 
     document.getElementById("clearAll").addEventListener("click", () => {
       if (!confirm("Limpar toda a árvore neste navegador? Exporta antes se quiseres guardar cópia.")) return;
