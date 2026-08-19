@@ -379,6 +379,14 @@
       box-shadow: none;
     }
 
+    .relation-shared-field {
+      grid-column: 1 / -1;
+    }
+
+    .relation-shared-field.hidden {
+      display: none;
+    }
+
     .relation-summary {
       display: flex;
       gap: 6px;
@@ -572,12 +580,17 @@
                 <select id="quickRelationType">
                   <option value="parent">É pai/mãe desta pessoa</option>
                   <option value="sibling">É irmão/ã desta pessoa</option>
+                  <option value="halfSibling">É meio-irmão/ã desta pessoa</option>
                   <option value="spouse">É casal com esta pessoa</option>
                 </select>
               </div>
               <div class="field">
                 <label for="quickRelationPerson">Pessoa existente</label>
                 <select id="quickRelationPerson"></select>
+              </div>
+              <div class="field relation-shared-field hidden" id="quickSharedParentField">
+                <label for="quickSharedParent">Pai/mãe em comum</label>
+                <select id="quickSharedParent"></select>
               </div>
               <button type="button" id="addQuickRelation">Adicionar relação</button>
             </div>
@@ -658,6 +671,8 @@
     const agePreview = document.getElementById("agePreview");
     const quickRelationType = document.getElementById("quickRelationType");
     const quickRelationPerson = document.getElementById("quickRelationPerson");
+    const quickSharedParentField = document.getElementById("quickSharedParentField");
+    const quickSharedParent = document.getElementById("quickSharedParent");
     const addQuickRelation = document.getElementById("addQuickRelation");
     const relationSummary = document.getElementById("relationSummary");
     const lookupPersonButton = document.getElementById("lookupPerson");
@@ -720,8 +735,23 @@
       const parents = new Set(parentIdsFor(personId));
       if (!parents.size) return [];
       return state.people
-        .filter(person => person.id !== personId && parentIdsFor(person.id).some(parentId => parents.has(parentId)))
+        .filter(person => person.id !== personId && commonParentIds(personId, person.id).length >= 2)
         .map(person => person.id);
+    }
+
+    function halfSiblingIdsFor(personId) {
+      return state.people
+        .filter(person => person.id !== personId && commonParentIds(personId, person.id).length === 1)
+        .map(person => person.id);
+    }
+
+    function commonParentIds(firstId, secondId) {
+      const firstParents = new Set(parentIdsFor(firstId));
+      return parentIdsFor(secondId).filter(parentId => firstParents.has(parentId));
+    }
+
+    function candidateSharedParentIds(sourceId, targetId) {
+      return [...new Set([...parentIdsFor(sourceId), ...parentIdsFor(targetId)])];
     }
 
     function addSiblingLinks(sourceId, targetId) {
@@ -731,6 +761,15 @@
         addLink("parent", parentId, sourceId);
         addLink("parent", parentId, targetId);
       }
+      return true;
+    }
+
+    function addHalfSiblingLink(sourceId, targetId, sharedParentId) {
+      if (!personById(sharedParentId)) return false;
+      const sourceParents = new Set(parentIdsFor(sourceId));
+      const targetParents = new Set(parentIdsFor(targetId));
+      if (!sourceParents.has(sharedParentId)) addLink("parent", sharedParentId, sourceId);
+      if (!targetParents.has(sharedParentId)) addLink("parent", sharedParentId, targetId);
       return true;
     }
 
@@ -1071,15 +1110,38 @@
         : `<option value="">Cria outra pessoa primeiro</option>`;
       quickRelationPerson.disabled = !selectablePeople.length;
       addQuickRelation.disabled = !selectablePeople.length;
+      updateQuickRelationControls();
 
       const chips = [
         relationChip("Pai/mãe", parentIdsFor(person.id)),
         relationChip("Irmãos", siblingIdsFor(person.id)),
+        relationChip("Meio-irmãos", halfSiblingIdsFor(person.id)),
         relationChip("Casal", spouseIdsFor(person.id))
       ].filter(Boolean);
       relationSummary.innerHTML = chips.length
         ? chips.join("")
         : `<span class="relation-chip">Sem relações definidas</span>`;
+    }
+
+    function updateQuickRelationControls() {
+      const needsSharedParent = quickRelationType.value === "halfSibling";
+      quickSharedParentField.classList.toggle("hidden", !needsSharedParent);
+
+      if (!needsSharedParent) {
+        quickSharedParent.innerHTML = "";
+        quickSharedParent.disabled = true;
+        addQuickRelation.disabled = !quickRelationPerson.value;
+        return;
+      }
+
+      const parentIds = selectedId && quickRelationPerson.value
+        ? candidateSharedParentIds(selectedId, quickRelationPerson.value)
+        : [];
+      quickSharedParent.innerHTML = parentIds.length
+        ? parentIds.map(id => `<option value="${id}">${escapeHtml(personById(id)?.name || "Sem nome")}</option>`).join("")
+        : `<option value="">Liga um pai/mãe a uma das pessoas primeiro</option>`;
+      quickSharedParent.disabled = !parentIds.length;
+      addQuickRelation.disabled = !quickRelationPerson.value || !parentIds.length;
     }
 
     function clearLookupResults() {
@@ -1238,7 +1300,7 @@
       render();
     }
 
-    function addRelationship(type, sourceId, targetId) {
+    function addRelationship(type, sourceId, targetId, options = {}) {
       const source = personById(sourceId);
       const target = personById(targetId);
       if (!source || !target) return false;
@@ -1257,6 +1319,14 @@
           alert("Para ligar irmãos, primeiro liga pelo menos um pai/mãe a uma das pessoas.");
         }
         return added;
+      }
+
+      if (type === "halfSibling") {
+        if (!options.sharedParentId) {
+          alert("Escolhe qual é o pai/mãe em comum para ligar meio-irmãos.");
+          return false;
+        }
+        return addHalfSiblingLink(source.id, target.id, options.sharedParentId);
       }
 
       return false;
@@ -1297,12 +1367,17 @@
 
     addQuickRelation.addEventListener("click", () => {
       if (!selectedId || !quickRelationPerson.value) return;
-      const added = addRelationship(quickRelationType.value, selectedId, quickRelationPerson.value);
-      if (!added && quickRelationType.value !== "sibling") {
+      const added = addRelationship(quickRelationType.value, selectedId, quickRelationPerson.value, {
+        sharedParentId: quickSharedParent.value
+      });
+      if (!added && !["sibling", "halfSibling"].includes(quickRelationType.value)) {
         alert("Essa relação já existe.");
       }
       render();
     });
+
+    quickRelationType.addEventListener("change", updateQuickRelationControls);
+    quickRelationPerson.addEventListener("change", updateQuickRelationControls);
 
     function openRelationship(type) {
       const source = personById(selectedId);

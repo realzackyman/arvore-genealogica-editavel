@@ -12,7 +12,7 @@ Funcionalidades:
 - mostrar idade automaticamente a partir do ano/data de nascimento
 - pesquisar dados públicos por nome via Wikidata
 - arrastar cartões no ecrã
-- ligar pai/mãe, irmãos e casal
+- ligar pai/mãe, irmãos, meio-irmãos e casal
 - definir relações directamente no editor da pessoa
 - organizar automaticamente
 - procurar pessoas
