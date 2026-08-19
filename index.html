@@ -301,6 +301,14 @@
 
     .field textarea { resize: vertical; min-height: 74px; }
 
+    .age-preview {
+      min-height: 22px;
+      margin: -2px 0 10px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
     .lookup-row {
       display: flex;
       gap: 8px;
@@ -490,13 +498,14 @@
           <div class="row">
             <div class="field">
               <label for="birth">Nascimento</label>
-              <input id="birth" placeholder="ex: 1948" />
+              <input id="birth" placeholder="ex: 1948 ou 27/08/1941" />
             </div>
             <div class="field">
               <label for="death">Falecimento</label>
               <input id="death" placeholder="opcional" />
             </div>
           </div>
+          <div class="age-preview" id="agePreview"></div>
           <div class="row">
             <div class="field">
               <label for="gender">Género</label>
@@ -586,6 +595,7 @@
     const genderField = document.getElementById("gender");
     const placeField = document.getElementById("place");
     const notesField = document.getElementById("notes");
+    const agePreview = document.getElementById("agePreview");
     const lookupPersonButton = document.getElementById("lookupPerson");
     const lookupStatus = document.getElementById("lookupStatus");
     const lookupResults = document.getElementById("lookupResults");
@@ -634,6 +644,69 @@
       if (from === to || hasLink(type, from, to)) return false;
       state.links.push({ type, from, to });
       return true;
+    }
+
+    function parsePersonDate(value) {
+      const clean = String(value || "").trim();
+      if (!clean) return null;
+
+      const fullDate = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{3,4})$/);
+      if (fullDate) {
+        const day = Number(fullDate[1]);
+        const month = Number(fullDate[2]);
+        const year = Number(fullDate[3]);
+        const date = new Date(year, month - 1, day);
+        if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) {
+          return { type: "full", year, month, day, date };
+        }
+      }
+
+      const monthYear = clean.match(/^(\d{1,2})[/-](\d{3,4})$/);
+      if (monthYear) {
+        const month = Number(monthYear[1]);
+        const year = Number(monthYear[2]);
+        if (month >= 1 && month <= 12) return { type: "month", year, month };
+      }
+
+      const yearOnly = clean.match(/\b(\d{3,4})\b/);
+      if (yearOnly) return { type: "year", year: Number(yearOnly[1]) };
+      return null;
+    }
+
+    function ageFromFullDates(birth, end) {
+      let age = end.getFullYear() - birth.date.getFullYear();
+      const birthdayPassed = end.getMonth() > birth.date.getMonth() ||
+        (end.getMonth() === birth.date.getMonth() && end.getDate() >= birth.date.getDate());
+      if (!birthdayPassed) age -= 1;
+      return Math.max(0, age);
+    }
+
+    function ageTextForDates(birthValue, deathValue) {
+      const birth = parsePersonDate(birthValue);
+      if (!birth) return "";
+      const death = parsePersonDate(deathValue);
+      const now = new Date();
+
+      if (birth.type === "full") {
+        const endDate = death?.type === "full" ? death.date : now;
+        const age = ageFromFullDates(birth, endDate);
+        return death ? `morreu aos ${age} anos` : `${age} anos`;
+      }
+
+      const endYear = death?.year || now.getFullYear();
+      const maxAge = Math.max(0, endYear - birth.year);
+      const minAge = Math.max(0, maxAge - 1);
+      const prefix = death ? "morreu com" : "idade";
+
+      if (birth.type === "month" && death?.type === "month") {
+        const beforeBirthMonth = death.month < birth.month;
+        const age = Math.max(0, endYear - birth.year - (beforeBirthMonth ? 1 : 0));
+        return death ? `morreu aos ${age} anos` : `${age} anos`;
+      }
+
+      return minAge === maxAge
+        ? `${prefix}: ${maxAge} anos`
+        : `${prefix}: ${minAge}-${maxAge} anos`;
     }
 
     function apiUrl(params) {
@@ -829,9 +902,10 @@
         card.dataset.id = person.id;
 
         const dates = [person.birth, person.death].filter(Boolean).join(" - ");
+        const ageText = ageTextForDates(person.birth, person.death);
         card.innerHTML = `
           <div class="person-name">${escapeHtml(person.name || "Sem nome")}</div>
-          <div class="person-dates">${escapeHtml(dates || "datas por preencher")}</div>
+          <div class="person-dates">${escapeHtml([dates, ageText].filter(Boolean).join(" | ") || "datas por preencher")}</div>
           <div class="person-meta">${escapeHtml(person.place || "local por preencher")}</div>
           <div class="person-actions">
             <button type="button" data-action="edit">Editar</button>
@@ -879,7 +953,12 @@
       genderField.value = person.gender || "outro";
       placeField.value = person.place || "";
       notesField.value = person.notes || "";
+      updateAgePreview();
       clearLookupResults();
+    }
+
+    function updateAgePreview() {
+      agePreview.textContent = ageTextForDates(birthField.value, deathField.value);
     }
 
     function clearLookupResults() {
@@ -912,6 +991,7 @@
       deathField.value = result.death || deathField.value;
       genderField.value = result.gender || genderField.value;
       placeField.value = result.place || placeField.value;
+      updateAgePreview();
 
       const sourceLine = `Fonte pública: ${result.source}`;
       if (!notesField.value.includes(sourceLine)) {
@@ -991,6 +1071,9 @@
       person.notes = notesField.value.trim();
       render();
     });
+
+    birthField.addEventListener("input", updateAgePreview);
+    deathField.addEventListener("input", updateAgePreview);
 
     document.getElementById("addPerson").addEventListener("click", () => {
       const person = {

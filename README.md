@@ -9,6 +9,7 @@ Abre `index.html` no browser ou usa a versão publicada no GitHub Pages.
 Funcionalidades:
 
 - adicionar e editar pessoas
+- mostrar idade automaticamente a partir do ano/data de nascimento
 - pesquisar dados públicos por nome via Wikidata
 - arrastar cartões no ecrã
 - ligar pai/mãe, irmãos e casal
